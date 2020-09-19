@@ -5,7 +5,7 @@ app.use(bodyParser.json())
  
 require('./app/router/router.js')(app);
 
-const db = require('./app/config/db.config.js');
+const db = require('./models/index');
 
 const Role = db.role;
   
@@ -15,7 +15,9 @@ const Role = db.role;
 //   initial();
 // });
  
-//require('./app/route/project.route.js')(app);
+// require('./app/route/project.route.js')(app);
+
+
  
 // Create a Server
 var server = app.listen(3000, function () {
@@ -25,21 +27,3 @@ var server = app.listen(3000, function () {
  
   console.log("App listening at http://%s:%s", host, port)
 })
-
-
-function initial(){
-	Role.create({
-		id: 1,
-		name: "STUDENT"
-	});
-	
-	Role.create({
-		id: 2,
-		name: "ADMIN"
-	});
-	
-	// Role.create({
-	// 	id: 3,
-	// 	name: "PM"
-	// });
-}

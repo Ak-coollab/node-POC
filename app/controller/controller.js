@@ -1,24 +1,97 @@
-const db = require('../config/db.config.js');
+const db = require('../../models/index');
 const config = require('../config/config.js');
-const User = db.user;
-const Role = db.role;
-const Books = db.books;
-const BooksIssued = db.books_issued;
+const validator = require('../validations/validation.js');
+const models = require('../../models');
+const User = models.Users;
+const Role = models.role;
+const Books = models.Books;
+const BooksIssued = models.Books_Issued;
+const ClassSection = db.class_sections;
+const Class = db.Class;
+const Section = db.Section;
+const fs = require('fs');
+const utils = require('../helpers/utils.js')
 
 const Op = db.Sequelize.Op;
 
 var jwt = require('jsonwebtoken');
 var bcrypt = require('bcryptjs');
+const { Buffer } = require('buffer');
 
 exports.signup = (req, res) => {
 	// Save User to Database
-	console.log("Processing func -> SignUp");
-	
+	const t = db.sequelize.transaction();
 	User.create({
 		name: req.body.name,
 		username: req.body.username,
 		email: req.body.email,
-		password: bcrypt.hashSync(req.body.password, 8)
+		password: bcrypt.hashSync(req.body.password, 8),
+		image: req.body.image,
+		base64Content : req.body.base64Content
+	}).then(user => {
+		console.log("user",user)
+		Class.findOne({
+			where : {
+				id : req.body.classId
+			}
+		}).then(classes => {
+			// console.log("hi");
+			Section.findOne({
+				where : {
+					id : req.body.sectionId
+				}
+			}).then(section => {
+				ClassSection.create({
+					classId : classes.id,
+					sectionId : section.id,
+					studentId: user.id
+				}).then(class_section => {
+					Role.findAll({
+						where: {
+						  name: {
+							[Op.or]: req.body.roles
+						  }
+						}
+					  }).then(roles => {
+						//   console.log(user);	
+						  user.setRoles(roles).then(() => {
+							  res.status(200).json({
+								  "message": "User registered successfully!",
+								  "user": user
+							  });
+						  });
+							// t.commit();
+					  }).catch(err => {
+						// t.rollback();
+						  res.status(500).send("Error -> " + err);
+					  });
+				}).catch(err => {
+					// t.rollback();
+					res.status(500).send("Section Error -> " + err);
+				})
+			}).catch(err => {
+				// t.rollback();
+				res.status(500).send("Section Error -> " + err);
+			});
+		}).catch(err => {
+			// t.rollback();
+			res.status(500).send("Class Error -> " + err);
+		});
+		
+
+	}).catch(err => {
+		// t.rollback();
+		res.status(500).send("Fail! Error -> " + err);
+	})
+}
+
+exports.adminSignUp = (req, res) => {
+	// Save User to Database
+	User.create({
+		name: req.body.name,
+		username: req.body.username,
+		email: req.body.email,
+		password: bcrypt.hashSync(req.body.password, 8),
 	}).then(user => {
 		Role.findAll({
 		  where: {
@@ -28,7 +101,10 @@ exports.signup = (req, res) => {
 		  }
 		}).then(roles => {
 			user.setRoles(roles).then(() => {
-				res.send("User registered successfully!");
+				res.status(200).json({
+					"message": "User registered successfully!",
+					"user": user
+				});
             });
 		}).catch(err => {
 			res.status(500).send("Error -> " + err);
@@ -215,7 +291,7 @@ exports.deleteBook = (req, res) => {
 }
 
 exports.borrowBooks = (req, res) => {
-	// console.log();
+	// console.log("req.body.bookId", req.body.bookId);
 	let issueDate = new Date(req.body.issue_date).toISOString().replace(/T/, ' ').replace(/\..+/, '');
 	let date = new Date(req.body.issue_date);
 	date.setDate(date.getDate() + 3); 
@@ -242,12 +318,12 @@ exports.searchBook = (req, res) => {
 			[Op.or] : [
 				{
 					book_name: {
-						[Op.like] : '%'+ req.query.Keyword +'%'
+						[Op.like] : '%'+ req.query.keyword +'%'
 					}
 				},
 				{
 					author_name: {
-						[Op.like] : '%'+ req.query.Keyword +'%'
+						[Op.like] : '%'+ req.query.keyword +'%'
 					}
 				}
 			]
@@ -266,6 +342,40 @@ exports.searchBook = (req, res) => {
 			});
 		}
 	}).catch(err => {
+		res.status(500).send("Fail! Error -> " + err);
+	})
+}
+
+//Fine amount is calculated using the date difference
+exports.bookDueAdmin = (req, res) => {
+	BooksIssued.findAll({ 
+		attributes: ["bookId","issue_date","due_date",[db.sequelize.literal('CASE WHEN DATEDIFF(issue_date ,due_date ) > 5 THEN DATEDIFF(issue_date ,due_date ) * 10 ELSE 0 END'), 'fine_amount']],
+		include: [{
+			model: Books,
+			as: 'books',
+			attributes: ['id','book_name', 'author_name'],
+		},
+		{
+			model: User,
+			as: 'user',
+			attributes: ['id','name', 'email'],
+		},
+	]
+		// attributes: ['book_name', 'author_name', 'book_description'],
+	}).then(books => {
+		if (books == null) {
+			res.status(200).json({
+				"description": "Book not found",
+				"book": {}
+			});			
+		} else {
+			res.status(200).json({
+				"description": "Book Detail",
+				"book": books
+			});
+		}
+	}).catch(err => {
+		console.log("err", err)
 		res.status(500).send("Fail! Error -> " + err);
 	})
 }
@@ -366,5 +476,21 @@ exports.studentBooks = (req, res) => {
 	})
 }
 
+
+exports.upload = (req, res) => {
+	console.log("hi", req.file.filename);
+	if (!(!!req.file && !!req.file.filename)) {
+		return res.notFound({ message: 'file not found' });
+	}
+	// console.log("hi", req.file.buffer.toString('base64'))
+	const path = `public/uploads/files/${req.file.filename}`;
+	var binaryData = fs.readFileSync(path);
+	var base64String = new Buffer(binaryData).toString("base64");
+	res.status(200).json({
+		"description": "File uploaded Successfully",
+		"filrURL": path,
+		"base64String" :base64String
+	});
+}
 
 
