@@ -18,18 +18,17 @@ var jwt = require('jsonwebtoken');
 var bcrypt = require('bcryptjs');
 const { Buffer } = require('buffer');
 
-exports.signup = (req, res) => {
+exports.signup = async (req, res) =>  {
 	// Save User to Database
-	const t = db.sequelize.transaction();
-	User.create({
+	const t = await db.sequelize.transaction();
+	await User.create({
 		name: req.body.name,
 		username: req.body.username,
 		email: req.body.email,
 		password: bcrypt.hashSync(req.body.password, 8),
 		image: req.body.image,
 		base64Content : req.body.base64Content
-	}).then(user => {
-		console.log("user",user)
+	}, { transaction: t }).then(user => {
 		Class.findOne({
 			where : {
 				id : req.body.classId
@@ -45,7 +44,7 @@ exports.signup = (req, res) => {
 					classId : classes.id,
 					sectionId : section.id,
 					studentId: user.id
-				}).then(class_section => {
+				}, { transaction: t }).then(class_section => {
 					Role.findAll({
 						where: {
 						  name: {
@@ -54,7 +53,8 @@ exports.signup = (req, res) => {
 						}
 					  }).then(roles => {
 						//   console.log(user);	
-						  user.setRoles(roles).then(() => {
+						user.setRoles(roles).then(() => {
+							t.commit();
 							  res.status(200).json({
 								  "message": "User registered successfully!",
 								  "user": user
@@ -62,25 +62,25 @@ exports.signup = (req, res) => {
 						  });
 							// t.commit();
 					  }).catch(err => {
-						// t.rollback();
+						t.rollback();
 						  res.status(500).send("Error -> " + err);
 					  });
 				}).catch(err => {
-					// t.rollback();
+					t.rollback();
 					res.status(500).send("Section Error -> " + err);
 				})
 			}).catch(err => {
-				// t.rollback();
-				res.status(500).send("Section Error -> " + err);
+				t.rollback();
+				res.status(500).send("Section Error -> Please Select a valid section");
 			});
 		}).catch(err => {
-			// t.rollback();
+			t.rollback();
 			res.status(500).send("Class Error -> " + err);
 		});
 		
 
 	}).catch(err => {
-		// t.rollback();
+		t.rollback();
 		res.status(500).send("Fail! Error -> " + err);
 	})
 }
@@ -266,7 +266,39 @@ exports.updateBook = (req, res) => {
 		}
 	}).catch(err => {
 		res.status(500).send("Fail! Error -> " + err);
-	})
+	});
+}
+
+exports.studentUpdate = (req, res) => {
+	let { params } = req;
+	User.update( {
+		name: req.body.name,
+		username: req.body.username,
+		password: bcrypt.hashSync(req.body.password, 8),
+		email: req.body.email,
+	},
+	{ 
+		where : {id : params.id} ,
+		// attributes: ['book_name', 'author_name', 'book_description'],
+	}).then(users => {
+		if (users == 0) {
+			res.status(200).json({
+				"description": "User not found",
+				"book": {}
+			});			
+		} else {
+			User.findOne({
+				where : {id : params.id} ,
+			}).then(users => {
+				res.status(200).json({
+					"description": "User Detail Updated successfully",
+					"book": users
+				});
+			});
+		}
+	}).catch(err => {
+		res.status(500).send("Fail! Error -> " + err);
+	});
 }
 
 exports.deleteBook = (req, res) => {
@@ -291,7 +323,7 @@ exports.deleteBook = (req, res) => {
 }
 
 exports.borrowBooks = (req, res) => {
-	// console.log("req.body.bookId", req.body.bookId);
+	console.log("issueDate", req.body.issue_date);
 	let issueDate = new Date(req.body.issue_date).toISOString().replace(/T/, ' ').replace(/\..+/, '');
 	let date = new Date(req.body.issue_date);
 	date.setDate(date.getDate() + 3); 
@@ -299,7 +331,7 @@ exports.borrowBooks = (req, res) => {
 	BooksIssued.create({
 		bookId: req.body.bookId,
 		userId: req.userId,
-		issue_date: issueDate,
+		issue_date: req.body.issue_date,
 		due_date : dueDate
 	}).then(books => {
 		res.status(200).json({
@@ -348,8 +380,9 @@ exports.searchBook = (req, res) => {
 
 //Fine amount is calculated using the date difference
 exports.bookDueAdmin = (req, res) => {
-	BooksIssued.findAll({ 
-		attributes: ["bookId","issue_date","due_date",[db.sequelize.literal('CASE WHEN DATEDIFF(issue_date ,due_date ) > 5 THEN DATEDIFF(issue_date ,due_date ) * 10 ELSE 0 END'), 'fine_amount']],
+	BooksIssued.findAll({
+		where : db.sequelize.literal('due_date > CURDATE()'), 
+		attributes: ["bookId","issue_date","due_date",[db.sequelize.literal('CASE WHEN DATEDIFF(due_date, issue_date) > 3 THEN DATEDIFF(due_date, issue_date) * 10 ELSE 0 END'), 'fine_amount']],
 		include: [{
 			model: Books,
 			as: 'books',
@@ -377,7 +410,7 @@ exports.bookDueAdmin = (req, res) => {
 	}).catch(err => {
 		console.log("err", err)
 		res.status(500).send("Fail! Error -> " + err);
-	})
+	});
 }
 
 
@@ -491,6 +524,23 @@ exports.upload = (req, res) => {
 		"filrURL": path,
 		"base64String" :base64String
 	});
+}
+
+exports.uploadUpdate = (req, res) => {
+	// console.log("hi", req.params);
+	if (!(!!req.file && !!req.file.filename)) {
+		return res.notFound({ message: 'file not found' });
+	}
+	// console.log("hi", req.file.buffer.toString('base64'))
+	// const path = `public/uploads/files/${req.file.filename}`;
+	// var binaryData = fs.readFileSync(path);
+	// var base64String = new Buffer(binaryData).toString("base64");
+
+	// res.status(200).json({
+	// 	"description": "File uploaded Successfully",
+	// 	"filrURL": path,
+	// 	"base64String" :base64String
+	// });
 }
 
 

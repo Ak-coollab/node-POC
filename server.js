@@ -17,7 +17,7 @@ const Role = db.role;
  
 // require('./app/route/project.route.js')(app);
 
-
+require('./cron/cron.js');
  
 // Create a Server
 var server = app.listen(3000, function () {

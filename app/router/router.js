@@ -45,11 +45,15 @@ module.exports = function(app) {
 
 	app.post('/api/student/borrow', [authJwt.verifyToken, authJwt.isStudent], controller.borrowBooks);
 
+	app.put('/api/student/update/:id', [validator.body(schema.studentDetailsUpdateSchema), authJwt.verifyToken, authJwt.isStudent], controller.studentUpdate);
+
 	app.get('/api/student/search', [authJwt.verifyToken, authJwt.isStudent], controller.searchBook);
 
 	app.get('/api/student/books', [authJwt.verifyToken, authJwt.isStudent], controller.bookDue);
 
 	app.post('/api/uploads', [authJwt.verifyToken, authJwt.isStudent, utils.uploads], controller.upload);
+
+	app.put('/api/uploads/:id', [authJwt.verifyToken, authJwt.isStudent, utils.uploadsUpdate], controller.uploadUpdate);
 
 	//Student API ends
 	app.use((err, req, res, next) => {
