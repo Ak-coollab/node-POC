@@ -15,7 +15,7 @@
     "MySQL",
     "Authentication"
   ],
-  "author": "grokonez.com",
+  "author": "Ashok",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
