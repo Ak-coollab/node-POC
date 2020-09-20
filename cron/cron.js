@@ -46,8 +46,8 @@ cron.schedule("*/5 * * * *", function(){
                 let mailOptions = { 
                     from: "ashok@askpundit.com",
                     to: element.user.email,
-                    subject: `Not a GDPR update ;)`,
-                    text: `Hi there, this email was automatically sent by us`
+                    subject: `Delay in book return`,
+                    text: `Hi there, this email is the inform that your book due date is crossed and please submit the books at the library`
                   };
                   transporter.sendMail(mailOptions, function(error, info) {
                     if (error) {
