@@ -11,12 +11,14 @@ const Class = db.Class;
 const Section = db.Section;
 const fs = require('fs');
 const utils = require('../helpers/utils.js')
+const StudentLogs = models.StudentLogs;
 
 const Op = db.Sequelize.Op;
 
 var jwt = require('jsonwebtoken');
 var bcrypt = require('bcryptjs');
 const { Buffer } = require('buffer');
+const { date } = require('joi');
 
 exports.signup = async (req, res) =>  {
 	// Save User to Database
@@ -130,6 +132,18 @@ exports.signin = (req, res) => {
 		if (!passwordIsValid) {
 			return res.status(401).send({ auth: false, accessToken: null, reason: "Invalid Password!" });
 		}
+
+		console.log(user);
+		user.getRoles().then(roles => {
+			for(let i=0; i<roles.length; i++){
+				console.log(roles[i].name);
+				if(roles[i].name.toUpperCase() === "STUDENT"){
+					var datetime = new Date();
+					var currDate = datetime.toISOString().slice(0,10);				
+					StudentLogs.create({ studentId : user.id, login_date: currDate });
+				}
+			}
+		});
 		
 		var token = jwt.sign({ id: user.id }, config.secret, {
 		  expiresIn: 86400 // expires in 24 hours
@@ -231,6 +245,28 @@ exports.getBook = (req, res) => {
 			res.status(200).json({
 				"description": "Book Detail",
 				"book": books
+			});
+		}
+	}).catch(err => {
+		res.status(500).send("Fail! Error -> " + err);
+	})
+}
+
+exports.studentAuditLogs = (req, res) => {
+	let { params } = req;
+	StudentLogs.findAll({ 
+		where : {studentId : params.id} ,
+		// attributes: ['book_name', 'author_name', 'book_description'],
+	}).then(logs => {
+		if (logs == null) {
+			res.status(200).json({
+				"description": "Logs not found",
+				"book": {}
+			});			
+		} else {
+			res.status(200).json({
+				"description": "Student Log Details",
+				"book": logs
 			});
 		}
 	}).catch(err => {

@@ -38,6 +38,8 @@ module.exports = function(app) {
 	app.get('/api/admin/search', [authJwt.verifyToken, authJwt.isAdmin], controller.searchBook);
 
 	app.get('/api/admin/books/delay', [authJwt.verifyToken, authJwt.isAdmin], controller.bookDueAdmin);
+
+	app.get('/api/student/auditLog/:id', [authJwt.verifyToken, authJwt.isAdmin], controller.studentAuditLogs);
 	//Admin API Ends
 
 
